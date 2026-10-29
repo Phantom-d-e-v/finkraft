@@ -41,6 +41,9 @@ class StatusUpdate:
 class AspAdapter(Protocol):
     asp_id: str
     status_delivery: Literal["poll", "webhook"]
+    # True if resending an invoice the ASP may already have is safe (ASP A's 409).
+    # False means a timed-out submission must be reconciled, never resent (ASP B).
+    rejects_duplicates: bool
 
     def submit(self, invoice: Invoice) -> SubmitResult: ...
 

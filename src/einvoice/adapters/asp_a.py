@@ -34,6 +34,7 @@ def _error(body: dict) -> AspError:
 class AspAAdapter:
     asp_id = "asp_a"
     status_delivery: Literal["poll", "webhook"] = "poll"
+    rejects_duplicates = True
 
     def __init__(self, client) -> None:
         # client.request(method, path, json=None) -> (status_code, body); may raise TimeoutError
