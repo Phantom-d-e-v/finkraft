@@ -15,7 +15,7 @@ and never be submitted twice. Every change is judged against that rule first.
 
 ```
 src/einvoice/
-  models.py         Invoice, Submission, StatusUpdate, enums
+  models.py         Invoice, AspError, HistoryEntry
   state_machine.py  InvoiceState + allowed transitions; raises on invalid ones
   store.py          in-memory store; unique (seller_id, invoice_number)
   adapters/

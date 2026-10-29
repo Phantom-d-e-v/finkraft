@@ -78,6 +78,9 @@ stop a poll run or make an ASP redeliver the webhook forever.
    `seller_asp` would need to become a routing rule.
 7. REJECTED is final, and a REJECTED or INVALID invoice keeps its number. Correcting
    and reissuing a rejected invoice is out of scope.
+8. ASP B (designed, not built) accepts a client reference on submit and echoes it in
+   its webhooks. That's how a timed-out ASP B submission gets matched without a resend.
+   If B can't do this, those invoices go to manual reconciliation.
 
 ## What I skipped
 
