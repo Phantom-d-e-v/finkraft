@@ -6,7 +6,7 @@ from typing import Callable
 
 from einvoice.adapters.base import AspAdapter, StatusUpdate, SubmitOutcome, SubmitResult
 from einvoice.models import AspError, HistoryEntry, Invoice
-from einvoice.state_machine import InvoiceState as S, is_stale, transition
+from einvoice.state_machine import InvalidTransition, InvoiceState as S, is_stale, transition
 from einvoice.store import InMemoryStore
 
 # shortcut: a handful of PINT AE mandatory terms, not the full rule set;
@@ -33,7 +33,8 @@ class SubmissionService:
         self.seller_asp = seller_asp  # seller's current ASP choice; changeable at any time
         self.clock = clock
         self.new_id = new_id
-        self.unmatched: list[tuple[str, StatusUpdate]] = []  # updates for submissions we don't know
+        self.unmatched: list[tuple[str, StatusUpdate]] = []  # updates for submissions not linked yet
+        self.needs_review: list[tuple[str, str]] = []  # (invoice id, reason) for a human to resolve
 
     def upload(self, seller_id: str, invoice_number: str, fields: dict[str, str]) -> Invoice:
         invoice = Invoice(id=self.new_id(), seller_id=seller_id,
@@ -78,8 +79,13 @@ class SubmissionService:
     def poll(self) -> None:
         for invoice in self.store.in_state(S.SUBMITTED, S.ACCEPTED, S.DELIVERED):
             adapter = self.adapters[invoice.asp_id]
-            if adapter.status_delivery == "poll":
-                self.apply_update(invoice.asp_id, adapter.fetch_status(invoice.submission_id))
+            if adapter.status_delivery != "poll":
+                continue
+            try:
+                update = adapter.fetch_status(invoice.submission_id)
+            except (LookupError, TimeoutError):
+                continue  # one failed GET must not stop the rest; next poll run retries it
+            self.apply_update(invoice.asp_id, update)
 
     def handle_webhook(self, asp_id: str, body: dict) -> bool:
         return self.apply_update(asp_id, self.adapters[asp_id].parse_webhook(body))
@@ -88,7 +94,8 @@ class SubmissionService:
         """Apply an ASP status update. Returns False if it was ignored.
 
         Repeated or late updates are recorded and ignored. A conflicting one
-        (REJECTED after ACCEPTED) raises InvalidTransition so a human looks at it.
+        (REJECTED after ACCEPTED) leaves the state as is and goes to needs_review.
+        It doesn't raise: a raise would stop a poll run or make the ASP redeliver forever.
         """
         invoice = self.store.by_submission(asp_id, update.submission_id)
         if invoice is None:
@@ -98,7 +105,13 @@ class SubmissionService:
             invoice.history.append(HistoryEntry(
                 self.clock(), invoice.state, f"ignored stale {update.asp_status}"))
             return False
-        self._move(invoice, update.state, f"{asp_id}: {update.asp_status}")
+        try:
+            self._move(invoice, update.state, f"{asp_id}: {update.asp_status}")
+        except InvalidTransition:
+            self.needs_review.append((invoice.id, f"{update.asp_status} conflicts with {invoice.state}"))
+            invoice.history.append(HistoryEntry(
+                self.clock(), invoice.state, f"conflicting {update.asp_status}, needs review"))
+            return False
         if update.errors:
             invoice.errors = list(update.errors)
         return True
@@ -130,6 +143,12 @@ class SubmissionService:
         invoice.submission_id = submission_id
         self.store.link_submission(invoice)
         self._move(invoice, S.SUBMITTED, note)
+        # A webhook can beat the submit response; apply anything parked for this submission.
+        key = (invoice.asp_id, submission_id)
+        parked = [u for asp, u in self.unmatched if (asp, u.submission_id) == key]
+        self.unmatched = [(asp, u) for asp, u in self.unmatched if (asp, u.submission_id) != key]
+        for update in parked:
+            self.apply_update(invoice.asp_id, update)
 
     def _move(self, invoice: Invoice, target: S, note: str = "") -> None:
         invoice.state = transition(invoice.state, target)

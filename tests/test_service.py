@@ -190,12 +190,40 @@ def test_webhooks_out_of_order_end_in_latest_state(service):
     assert sum("ignored stale" in h.note for h in invoice.history) == 3
 
 
-def test_conflicting_webhook_raises(service):
+def test_conflicting_webhook_is_flagged_not_applied(service):
     invoice = submitted_to_b(service)
     service.handle_webhook("asp_b", {"job_id": invoice.submission_id, "status": "ACCEPTED"})
-    with pytest.raises(InvalidTransition):
-        service.handle_webhook("asp_b", {"job_id": invoice.submission_id, "status": "FAILED"})
+    assert not service.handle_webhook("asp_b", {"job_id": invoice.submission_id, "status": "FAILED"})
     assert invoice.state == S.ACCEPTED
+    assert service.needs_review == [(invoice.id, "FAILED conflicts with ACCEPTED")]
+
+
+def test_conflict_during_poll_does_not_stop_other_invoices(service, api):
+    first, second = upload(service, "INV-001"), upload(service, "INV-002")
+    service.submit_pending()
+    api.set_status(first.submission_id, "VALIDATED")
+    service.poll()
+    api.set_status(first.submission_id, "REJECTED")  # conflicts with ACCEPTED
+    api.set_status(second.submission_id, "VALIDATED")
+    service.poll()
+    assert (first.state, second.state) == (S.ACCEPTED, S.ACCEPTED)
+    assert service.needs_review[0][0] == first.id
+
+
+def test_failed_status_lookup_does_not_stop_other_invoices(service, api):
+    first, second = upload(service, "INV-001"), upload(service, "INV-002")
+    service.submit_pending()
+    first.submission_id = "A-9999"  # ASP returns 404 for this one
+    api.set_status(second.submission_id, "VALIDATED")
+    service.poll()
+    assert second.state == S.ACCEPTED
+
+
+def test_webhook_before_submit_response_is_applied_once_linked(service, asp_b):
+    service.handle_webhook("asp_b", {"job_id": "job-1", "status": "ACCEPTED"})
+    invoice = submitted_to_b(service)  # FakeWebhookAdapter returns job-1
+    assert invoice.state == S.ACCEPTED
+    assert service.unmatched == []
 
 
 def test_webhook_for_unknown_job_is_parked(service):
