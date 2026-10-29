@@ -51,7 +51,8 @@ checks which ASP it's talking to. Errors from both formats become one
 
 An invoice records the `asp_id` it was sent to and keeps it. A seller switching ASP
 changes where *new* invoices go; anything already at the old ASP is tracked there to
-the end. Adding an ASP is a new adapter class and nothing else.
+the end. Adding an ASP is a new adapter class. A seller using two ASPs at once only turns
+the seller → ASP setting into a routing rule; tracking already keys on the invoice's `asp_id`.
 
 ## 2. Invoice state machine
 
