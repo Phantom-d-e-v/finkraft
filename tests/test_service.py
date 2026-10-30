@@ -94,6 +94,11 @@ def test_invalid_invoice_is_never_sent(service, api):
     assert api.post_count == 0
 
 
+def test_blank_invoice_number_is_refused(service):
+    with pytest.raises(ValueError):
+        upload(service, number="  ")
+
+
 def test_corrected_invoice_keeps_its_number(service):
     invoice = upload(service, **{"BT-48": ""})
     invoice.fields["BT-48"] = "100000000000003"
@@ -117,6 +122,26 @@ def test_timeout_after_acceptance_is_recovered_without_double_submit(service, ap
     assert invoice.state == S.SUBMISSION_UNKNOWN
 
     service.submit_pending()  # retry gets 409 with the existing id
+    assert invoice.state == S.SUBMITTED
+    assert invoice.submission_id == "A-0001"
+    assert api.post_count == 1
+
+
+def test_rate_limited_retry_after_timeout_stays_unknown(service, api):
+    invoice = upload(service)
+    api.timeout_after_accept = True
+    service.submit(invoice.id)
+    api.timeout_after_accept = False
+    for _ in range(9):
+        api.request("GET", "/invoices/A-0001")  # use up the rest of this second's 10 requests
+
+    service.submit(invoice.id)  # retry gets 429
+    assert invoice.state == S.SUBMISSION_UNKNOWN
+    assert invoice.asp_id == "asp_a"
+
+    service.seller_asp["seller-1"] = "asp_b"  # a switch must not send it elsewhere
+    api._clock.now = 1.0
+    service.submit_pending()  # 409 with the existing id
     assert invoice.state == S.SUBMITTED
     assert invoice.submission_id == "A-0001"
     assert api.post_count == 1

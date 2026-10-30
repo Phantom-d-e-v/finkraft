@@ -2,7 +2,7 @@
 
 **Goal:** first production release in 6 weeks (about 11 Dec) with both ASPs live,
 three weeks before the 1 Jan 2027 mandate. Launch customers have already appointed
-their ASPs (Phase 1 deadline was 30 Oct), so shipping one ASP would leave some of them
+their ASPs (Phase 1 deadline 30 Oct, extended from 31 Jul), so shipping one ASP would leave some of them
 unable to comply. Team: BE1–3 backend, FE frontend. I write code for the first two weeks.
 
 ## Week 1: confirm the facts, start the core
@@ -19,12 +19,12 @@ unable to comply. Team: BE1–3 backend, FE frontend. I write code for the first
 
 - Staging: a real customer CSV → validated → ASP A → polled to REPORTED; ASP B to ACCEPTED by webhook.
 - Outbox worker, backoff, a token bucket per ASP, raw ASP request and response stored for audit.
-- CI, staging, structured logs, and alerts on stuck invoices from day one. FE runs against the real API.
+- **Me:** CI, staging, structured logs, and alerts on stuck invoices from day one (I own infra until we hire). FE runs against the real API.
 
 ## Weeks 3–4: finish both ASPs, then try to break them
 
 - BE1/BE2 take their ASP to feature complete. BE3 owns reconciliation (SUBMISSION_UNKNOWN,
-  needs_review, unmatched webhooks). FE: error view, fix and resubmit, ops queue.
+  needs_review, unmatched webhooks). FE: error view, fix and resubmit invalid invoices, ops queue.
 - Failure drills as automated tests: kill the worker mid-submit, replay and reorder
   webhooks, time out after acceptance. "Never lost, never twice" must hold in every one.
 - Two design partners run real invoice files through the sandboxes. Security pass:

@@ -29,7 +29,7 @@ timeouts after the invoice was already stored, and 409 on duplicate numbers.
 | `src/einvoice/adapters/base.py` | The adapter contract both ASPs implement |
 | `src/einvoice/adapters/asp_a.py` | ASP A adapter and the fake ASP A API |
 | `src/einvoice/service.py` | Upload, validate, submit, retry, poll, webhooks |
-| `tests/` | 58 tests: transitions, duplicates, timeouts, rate limits, out-of-order and conflicting updates |
+| `tests/` | 60 tests: transitions, duplicates, timeouts, rate limits, out-of-order and conflicting updates |
 
 ### States
 
@@ -40,6 +40,7 @@ VALIDATED           -> SUBMITTING
 SUBMITTING          -> SUBMITTED             (ASP acknowledged)
                     -> REJECTED              (400, or 409 on first attempt)
                     -> VALIDATED             (not sent: 429 / connection refused)
+                                             (on a retry it stays SUBMISSION_UNKNOWN)
                     -> SUBMISSION_UNKNOWN    (timeout, 5xx, anything undocumented)
 SUBMISSION_UNKNOWN  -> SUBMITTING            (retry, only if the ASP rejects duplicates)
                     -> SUBMITTED             (for a future reconciliation job; unused)
@@ -92,7 +93,8 @@ stop a poll run or make an ASP redeliver the webhook forever.
 - Polling errors: a failed or rate-limited `GET` is skipped until the next poll run.
   Polls count against ASP A's 10 req/s as well.
 - ASP B timeout reconciliation: a timed-out ASP B submission raises
-  `ResubmitNotSafe` and stops there.
+  `ResubmitNotSafe` and stops there. `StatusUpdate.client_ref` is in the contract for
+  this, but nothing matches on it yet.
 - Transport: no HTTP client, auth or TLS. The adapter only runs against the fake.
 - Bulk upload and enrichment: the service takes one invoice dict at a time. No
   CSV/Excel parsing, and no PINT AE enrichment.

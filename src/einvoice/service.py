@@ -37,6 +37,8 @@ class SubmissionService:
         self.needs_review: list[tuple[str, str]] = []  # (invoice id, reason) for a human to resolve
 
     def upload(self, seller_id: str, invoice_number: str, fields: dict[str, str]) -> Invoice:
+        if not invoice_number.strip():
+            raise ValueError("invoice number is required")  # it's the duplicate key
         invoice = Invoice(id=self.new_id(), seller_id=seller_id,
                           invoice_number=invoice_number, fields=fields)
         self.store.add(invoice)  # raises DuplicateInvoice before anything else happens
@@ -133,6 +135,9 @@ class SubmissionService:
             case SubmitOutcome.REJECTED:
                 invoice.errors = list(result.errors)
                 self._move(invoice, S.REJECTED, "rejected on submit")
+            case SubmitOutcome.NOT_SENT if retrying:
+                # This retry didn't arrive, but the timed-out attempt before it may have.
+                self._move(invoice, S.SUBMISSION_UNKNOWN, "retry not sent, still unknown")
             case SubmitOutcome.NOT_SENT:
                 invoice.asp_id = None  # never reached the ASP, so a seller's switch still applies
                 self._move(invoice, S.VALIDATED, "not sent, will retry")

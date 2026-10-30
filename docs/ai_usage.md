@@ -27,5 +27,5 @@ else that contradicts it goes to `needs_review`. There's a test for it now.
 
 **One output I rejected.** It drew the state machine as an ASCII diagram in the
 README. With 16 arrows it was unreadable, so I replaced it with a plain
-transition list and drew the diagram myself in paper.design, checking every
+transition list and drew the diagram myself in paper.design, checking each
 arrow against the transition table in the code.

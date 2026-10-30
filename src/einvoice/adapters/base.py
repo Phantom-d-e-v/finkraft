@@ -36,6 +36,7 @@ class StatusUpdate:
     state: InvoiceState
     asp_status: str  # raw ASP value, kept for the audit trail
     errors: tuple[AspError, ...] = ()
+    client_ref: str | None = None  # our invoice id, if the ASP echoes it (B); for reconciliation
 
 
 class AspAdapter(Protocol):
